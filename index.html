@@ -135,6 +135,7 @@
   /* ---------- stats ---------- */
   .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
     border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:28px}
+  .stats.two{grid-template-columns:1fr 1fr;margin-bottom:10px}
   .stat{background:var(--panel);padding:14px 6px;text-align:center}
   .stat .v{font-size:22px;font-weight:800;letter-spacing:-.02em}
   .stat .small{margin-top:4px;font-size:11px}
@@ -184,7 +185,7 @@
   details[open] summary::before{content:"\2212 "}
   .field{margin-top:16px}
   .field label{display:block;font-size:12px;color:var(--dim);margin-bottom:6px}
-  .field input,.field textarea{width:100%;padding:10px;background:var(--bg);color:var(--ink);
+  .field input,.field textarea,.field select{width:100%;padding:10px;background:var(--bg);color:var(--ink);
     border:1px solid var(--line);border-radius:6px;font-family:inherit;font-size:14px}
   .field textarea{resize:vertical;line-height:1.5;font-size:11px;word-break:break-all;font-family:ui-monospace,Menlo,Consolas,monospace}
   .field .row{display:flex;gap:10px;margin-top:10px}
@@ -214,7 +215,7 @@
       <div class="triad" aria-hidden="true"><i></i><i></i><i></i><span id="triadText">0 of 3</span></div>
     </div>
     <div class="tiles" id="dailyTiles"></div>
-    <div class="either">Practice, one is enough</div>
+    <div class="either" id="eitherLabel">Any one of these</div>
     <div class="tiles" id="practiceTiles"></div>
     <div class="today-foot">
       <div class="small" id="todayNote"></div>
@@ -230,11 +231,15 @@
 
   <section class="parts" id="parts" aria-label="Each part on its own"></section>
 
-  <div class="stats">
+  <div class="stats two">
     <div class="stat"><div class="v num" id="sFull">0</div><div class="small">full days</div></div>
     <div class="stat"><div class="v num" id="sStreak">0</div><div class="small">streak</div></div>
+  </div>
+  <div class="stats">
     <div class="stat"><div class="v num" id="sPiano">0</div><div class="small">piano</div></div>
     <div class="stat"><div class="v num" id="sTrain">0</div><div class="small">training</div></div>
+    <div class="stat"><div class="v num" id="sKids">0</div><div class="small">kids</div></div>
+    <div class="stat"><div class="v num" id="sLudka">0</div><div class="small">Ludka</div></div>
   </div>
 
   <div class="keys-head">
@@ -264,6 +269,10 @@
       <label for="fPct">Full days to aim for (%)</label>
       <input type="number" id="fPct" min="50" max="100" step="1">
       <p class="small" style="margin:6px 0 0">Skipped days leave the total before this is worked out.</p>
+    </div>
+    <div class="field">
+      <label for="fNeed">How many of piano, training, kids and Ludka make a full day</label>
+      <select id="fNeed"><option value="1">Any one</option><option value="2">Any two</option></select>
     </div>
     <div class="field">
       <label for="fBackup">Backup</label>
@@ -329,11 +338,13 @@ function fmtDay(k){ return fromKey(k).toLocaleDateString('en-GB', { weekday:'sho
    3. STATE
    days[k] = { cal, ring, piano, train }   skips[k] = true
    ============================================================ */
-var defaults = { start: todayKey(), end: '2027-02-15', percent: 80 };
+var defaults = { start: todayKey(), end: '2027-02-15', percent: 80, need: 1 };
 var state = { settings: Object.assign({}, defaults), days: {}, skips: {} };
 
 function dayOf(k){ return state.days[k] || {}; }
-function practiced(d){ return !!(d.piano || d.train); }
+var TIME = ['piano','train','kids','ludka'];
+function timeCount(d){ return TIME.filter(function(p){ return d[p]; }).length; }
+function practiced(d){ return timeCount(d) >= (state.settings.need || 1); }
 function partsDone(d){ return (d.cal?1:0) + (d.ring?1:0) + (practiced(d)?1:0); }
 function isFull(d){ return partsDone(d) === 3; }
 
@@ -350,7 +361,7 @@ function compute(){
   var soFar = idx < 0 ? 0 : Math.min(idx + 1, totalDays);
   var concluded = Math.min(Math.max(idx, 0), totalDays);
 
-  var skipped = 0, skippedSoFar = 0, full = 0, missed = 0, piano = 0, train = 0;
+  var skipped = 0, skippedSoFar = 0, full = 0, missed = 0, piano = 0, train = 0, kids = 0, ludka = 0;
   var fullSeen = 0, denomCounted = 0, denomAll = 0;
   var part = { cal:[0,0], ring:[0,0], prac:[0,0] };   // [done, out of]
 
@@ -359,6 +370,8 @@ function compute(){
     var past = i < concluded, isToday = i === idx;
     if (d.piano) piano++;
     if (d.train) train++;
+    if (d.kids) kids++;
+    if (d.ludka) ludka++;
 
     if (state.skips[k]){
       skipped++;
@@ -385,7 +398,7 @@ function compute(){
     totalDays: totalDays, idx: idx, soFar: soFar, concluded: concluded,
     skipped: skipped, skippedSoFar: skippedSoFar, eligible: eligible,
     needed: needed, budget: budget, missed: missed, full: full, left: budget - missed,
-    piano: piano, train: train, part: part,
+    piano: piano, train: train, kids: kids, ludka: ludka, part: part,
     rateCounted: denomCounted ? fullSeen / denomCounted : null,
     rateAll: denomAll ? fullSeen / denomAll : null
   };
@@ -409,13 +422,17 @@ var ICON = {
   ring:  '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.6"/><circle cx="12" cy="12" r="2.2"/></svg>',
   piano: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M8 13v6M12 13v6M16 13v6"/><path d="M6.5 5v8h3V5M14.5 5v8h3V5"/></svg>',
   train: '<svg viewBox="0 0 24 24"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/></svg>',
+  kids:  '<svg viewBox="0 0 24 24"><circle cx="8" cy="7" r="2.6"/><circle cx="16.5" cy="9.2" r="2"/><path d="M3.5 20v-2.5A4.5 4.5 0 0 1 8 13a4.5 4.5 0 0 1 4.5 4.5V20"/><path d="M13.3 20v-1.8a3.2 3.2 0 0 1 6.4 0V20"/></svg>',
+  ludka: '<svg viewBox="0 0 24 24"><path d="M12 20s-7.5-4.4-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.6-7.5 10-7.5 10z"/></svg>',
   check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>'
 };
 var PARTS = {
   cal:   { name:'Calories', sub:'tracked in the app' },
   ring:  { name:'Rings',    sub:'closed on the watch' },
   piano: { name:'Piano',    sub:'played today' },
-  train: { name:'Training', sub:'a session done' }
+  train: { name:'Training', sub:'a session done' },
+  kids:  { name:'Kids',     sub:'real time together' },
+  ludka: { name:'Ludka',    sub:'just the two of you' }
 };
 function tileHTML(p, on, disabled){
   return '<button class="tile' + (on ? ' on' : '') + '" data-part="' + p + '" aria-pressed="' + (on ? 'true' : 'false') + '"' + (disabled ? ' disabled' : '') + '>' +
@@ -461,7 +478,9 @@ function render(){
   for (var i = 0; i < 3; i++) bars[i].classList.toggle('on', i < done && !skippedToday);
   $('triadText').textContent = skippedToday ? 'Skipped' : (fullNow ? 'Full day' : done + ' of 3');
   $('dailyTiles').innerHTML = tileHTML('cal', !!d.cal) + tileHTML('ring', !!d.ring);
-  $('practiceTiles').innerHTML = tileHTML('piano', !!d.piano) + tileHTML('train', !!d.train);
+  $('practiceTiles').innerHTML = TIME.map(function(p){ return tileHTML(p, !!d[p]); }).join('');
+  var need = s.need || 1, have = timeCount(d);
+  $('eitherLabel').textContent = need === 1 ? 'Any one of these' : 'Any two of these' + (have === 1 ? ', one so far' : '');
   $('skipBtn').textContent = skippedToday ? 'Un-skip' : 'Skip today';
   $('todayNote').textContent = skippedToday ? 'Out of the sum entirely, neither full nor missed.'
     : (!inWindow ? 'Today is outside the season dates.' : (fullNow ? 'All three done.' : ''));
@@ -474,7 +493,7 @@ function render(){
     : 'No days skipped';
 
   // parts
-  var rows = [['cal','Calories'],['ring','Rings'],['prac','Practice']];
+  var rows = [['cal','Calories'],['ring','Rings'],['prac','Time']];
   var rates = rows.map(function(r){ var p = c.part[r[0]]; return p[1] ? p[0] / p[1] : null; });
   var known = rates.filter(function(x){ return x !== null; });
   var weakest = -1;
@@ -494,6 +513,8 @@ function render(){
   $('sStreak').textContent = streak();
   $('sPiano').textContent = c.piano;
   $('sTrain').textContent = c.train;
+  $('sKids').textContent = c.kids;
+  $('sLudka').textContent = c.ludka;
 
   // keybed
   var bed = $('keybed'); bed.innerHTML = '';
@@ -525,7 +546,7 @@ function render(){
   }
 
   // settings
-  $('fStart').value = s.start; $('fEnd').value = s.end; $('fPct').value = s.percent;
+  $('fStart').value = s.start; $('fEnd').value = s.end; $('fPct').value = s.percent; $('fNeed').value = String(s.need || 1);
   var ta = $('fBackup');
   if (document.activeElement !== ta) ta.value = JSON.stringify(state);
 
@@ -541,7 +562,7 @@ function togglePart(k, p){
   var before = isFull(dayOf(k));
   var d = Object.assign({}, dayOf(k));
   d[p] = !d[p];
-  if (!d.cal && !d.ring && !d.piano && !d.train) delete state.days[k];
+  if (!Object.keys(d).some(function(x){ return d[x]; })) delete state.days[k];
   else state.days[k] = d;
   if (d[p]) delete state.skips[k];
   if (k === todayKey() && !before && isFull(d)){
@@ -565,9 +586,9 @@ function renderSheet(){
   var k = sheetKey, d = dayOf(k), future = diffDays(todayKey(), k) > 0, sk = !!state.skips[k];
   $('sheetTitle').textContent = fmtDay(k) + (k === todayKey() ? ', today' : '');
   $('sheetStatus').textContent = sk ? 'Skipped' : (isFull(d) ? 'Full day' : partsDone(d) + ' of 3');
-  $('sheetTiles').innerHTML = ['cal','ring','piano','train'].map(function(p){ return tileHTML(p, !!d[p], future); }).join('');
+  $('sheetTiles').innerHTML = ['cal','ring'].concat(TIME).map(function(p){ return tileHTML(p, !!d[p], future); }).join('');
   $('sheetNote').textContent = future ? 'This day has not happened yet. You can still mark it skipped, for travel or a planned day off.'
-    : 'Piano or training covers the practice part.';
+    : ((state.settings.need || 1) === 1 ? 'Any one of piano, training, kids or Ludka covers the time part.' : 'Any two of piano, training, kids or Ludka cover the time part.');
   $('sheetSkip').textContent = sk ? 'Un-skip this day' : 'Skip this day';
 }
 function openSheet(k){ sheetKey = k; renderSheet(); $('sheetBg').classList.add('open'); $('sheetDone').focus(); }
@@ -581,12 +602,13 @@ $('sheetBg').addEventListener('click', function(e){ if (e.target === $('sheetBg'
 document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && sheetKey) closeSheet(); });
 
 /* ----- settings ----- */
-['fStart','fEnd','fPct'].forEach(function(id){
+['fStart','fEnd','fPct','fNeed'].forEach(function(id){
   $(id).addEventListener('change', function(){
     var s = state.settings;
     s.start = $('fStart').value || s.start;
     s.end = $('fEnd').value || s.end;
     s.percent = Math.min(100, Math.max(50, Number($('fPct').value) || s.percent));
+    s.need = Number($('fNeed').value) === 2 ? 2 : 1;
     if (diffDays(s.start, s.end) < 0) s.end = s.start;
     needScroll = true;
     commit();
